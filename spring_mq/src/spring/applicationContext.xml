@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:util="http://www.springframework.org/schema/util" xmlns:amq="http://www.springframework.org/schema/p"
+       xmlns:jms="http://www.springframework.org/schema/jms"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans-3.0.xsd    
+            http://www.springframework.org/schema/context    
+            http://www.springframework.org/schema/context/spring-context-3.0.xsd
+            http://www.springframework.org/schema/util
+            http://www.springframework.org/schema/util/spring-util.xsd http://www.springframework.org/schema/jms http://www.springframework.org/schema/jms/spring-jms.xsd"
+       default-autowire="byName">
+
+    <!-- 打开扫描注解 -->
+    <context:annotation-config/>
+    <context:component-scan base-package="com.snow.action" />
+
+    <!-- ActiveMQ 连接工厂由 JMS提供厂商提供 -->
+    <bean id="amqConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+        <property name="brokerURL" value="failover:(tcp://127.0.0.1:61616)"/>
+    </bean>
+
+    <!-- Spring用于管理真正的ConnectionFactory的ConnectionFactory -->
+    <bean id="connectionFactory" class="org.springframework.jms.connection.SingleConnectionFactory">
+        <!-- 目标ConnectionFactory对应真实的可以产生JMS Connection的ConnectionFactory -->
+        <property name="targetConnectionFactory" ref="amqConnectionFactory"/>
+    </bean>
+
+    <!-- 定义消息队列（Queue） -->
+    <bean id="queueDestination" class="org.apache.activemq.command.ActiveMQQueue">
+        <!-- 设置消息队列的名字 -->
+        <constructor-arg>
+            <value>FirstQueue</value>
+        </constructor-arg>
+    </bean>
+
+    <!-- 配置JMS模板（Queue），Spring提供的JMS工具类，它发送、接收消息。 -->
+    <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <property name="connectionFactory" ref="connectionFactory" />
+        <property name="defaultDestination" ref="queueDestination" />
+        <property name="receiveTimeout" value="10000" />
+    </bean>
+
+    <!-- 配置监听 -->
+    <bean id="consumerMessageListener" class="com.snow.action.ConsumerMessageListener"/>
+
+    <!-- 消息监听容器（Queue），配置连接工厂，监听的队列是testSpringQueue，监听器是上面定义的监听器 -->
+    <bean id="jmsContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="connectionFactory" />
+        <property name="destination" ref="queueDestination" />
+        <property name="messageListener" ref="consumerMessageListener" />
+        <!-- 主题和队列的差异，如果这里设置为true则是，主题类型发布  订阅，默认为false
+
+              Topic和queue的最大区别在于topic是以广播的形式，通知所有在线监听的客户端有新的消息，没有监听的客户端将收不到消息；
+              而queue则是以点对点的形式通知多个处于监听状态的客户端中的一个。
+
+              Topic数据默认不落地，是无状态的。Queue默认是会以文件形式存储，也可DB存储
+
+              Queue：接收者收到后，通知MQ服务器已经接收，服务器对消息进行删除或者其他处理
+              Queue：支持事务
+        -->
+        <property name="pubSubDomain" value="false" />
+    </bean>
+
+</beans>
